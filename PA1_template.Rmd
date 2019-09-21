@@ -1,25 +1,98 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "PA1_template"
+output: html_document
 ---
+## 1. Code for reading in the dataset and/or processing the data
+
+```{r setup}
+# load libraries
+library(magrittr)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(devtools)
+library(lubridate)
+# download file from web
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip", destfile = "activity.zip", mode="wb")
+# unzip data and read 
+unzip("activity.zip")
+stepdata <- read.csv("activity.csv", header = TRUE)
+# data transformations
+stepdata$date <- ymd(stepdata$date)
+    stepdata$weekend <- as.factor(ifelse(weekdays(stepdata$date)=="Saturday" | weekdays(stepdata$date)=="Sunday","weekend","weekday"))
+    stepdata$dayofweek <- as.factor(weekdays(stepdata$date))
+# visually inspect data
+head(stepdata)
+```
+
+## 2. Histogram of the total number of steps taken each day
 
 
-## Loading and preprocessing the data
+```{r stepsperday}
+databydate <- stepdata %>% select(date, steps) %>% group_by(date) %>% summarize(tsteps= sum(steps)) %>%na.omit()
+hist(databydate$tsteps, xlab = "Total Daily Steps",main="Histogram of Total Steps by Day", breaks = 20)
+```
+
+## 3. Calculate and report the mean and median of the total number of steps taken per day
 
 
+```{r meanmedian}
+mean(databydate$tsteps)
+median(databydate$tsteps)
+```
 
-## What is mean total number of steps taken per day?
+## 4. Time series plot of the average number of steps taken
+
+```{r plotavgsteps}
+databyinterval <- stepdata%>% select(interval, steps) %>% na.omit() %>% group_by(interval) %>% summarize(tsteps= mean(steps)) 
+ggplot(databyinterval, aes(x=interval, y=tsteps))+ geom_line()
+```
 
 
+## 5. The 5-minute interval that, on average, contains the maximum number of steps
 
-## What is the average daily activity pattern?
-
-
-
-## Imputing missing values
-
+```{r fivemininterval}
+databyinterval[which(databyinterval$tsteps== max(databyinterval$tsteps)),]
+```
 
 
-## Are there differences in activity patterns between weekdays and weekends?
+## 6. Code to describe and show a strategy for imputing missing data
+
+```{r missvals}
+sum(is.na(stepdata))
+# subset dataset where there are no NAs
+    activity_no_NA <- stepdata[which(!is.na(stepdata$steps)),]
+  
+  # calculate the mean steps for each interval
+    interval_only <- activity_no_NA %>% group_by(interval) %>% summarise(average=mean(steps))
+
+    # convert the average to integer
+    interval_only$average <- as.integer(interval_only$average)
+    
+    #subset dataset where steps have NAs
+    activity_na <- stepdata[which(is.na(stepdata$steps)),]
+    
+    # fill NAs with average steps based on interval
+    activity_na$steps <- ifelse(activity_na$interval==interval_only$interval,interval_only$average)
+    
+    # row bind the datasets that do not have NAs and the dataset where NAs are replaced with
+    # mean values
+    activity_impute <- rbind(activity_no_NA,activity_na)
+```
+    
+## 7. Histogram of the total number of steps taken each day after missing values are imputed
+
+```{r newnist}
+  stepsByDay_impute <- activity_impute %>% group_by(date) %>% summarise(stepsperday = sum(steps))
+    qplot(stepsperday,data=stepsByDay_impute,na.rm=TRUE,binwidth=500,xlab='Total Steps per Day', ylab='Frequency',main = 'Histogram of the total number of steps taken each day')
+      totalstepsperday_impute <- activity_impute %>% group_by(date) %>% summarise(stepsperday = sum(steps))
+  mean_n_median <- totalstepsperday_impute %>% summarise(average=mean(stepsperday),median=median(stepsperday))
+  mean_n_median
+```
+
+## 8. Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends
+
+```{r panelplot}
+meansteps <- activity_impute %>% group_by(interval,weekend) %>%   summarise(average = mean(steps))
+  qplot(interval,average,data=meansteps,geom="line",facets=weekend~.,xlab="5-minute interval",ylab="average number of steps",main="Average steps pattern between Weekday and Weekend")
+```
